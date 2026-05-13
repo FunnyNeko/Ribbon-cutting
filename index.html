@@ -291,6 +291,17 @@ body {
   background: rgba(2,2,8,0.78);
 }
 
+/* ── Finale full-screen image ── */
+#finale {
+  position: fixed; inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  opacity: 0;
+  background: url('main.png') center center / cover no-repeat;
+  transition: opacity 1.5s;
+}
+#finale.on { opacity: 1; }
+
 .v-card {
   text-align: center;
   padding: 52px 80px 48px;
@@ -445,6 +456,9 @@ body {
 <!-- Confetti -->
 <canvas id="confetti"></canvas>
 
+<!-- Finale -->
+<div id="finale"></div>
+
 <!-- Victory -->
 <div id="victory">
   <div class="v-card">
@@ -522,6 +536,7 @@ const blEl      = document.getElementById('bl');
 const ribbonEl  = document.getElementById('ribbon');
 const rwrap     = document.getElementById('rwrap');
 const victoryEl = document.getElementById('victory');
+const finaleEl  = document.getElementById('finale');
 const hintEl    = document.getElementById('hint');
 const subBlock  = document.getElementById('subtitle-block');
 const confCvs   = document.getElementById('confetti');
@@ -530,6 +545,9 @@ const bgCvs     = document.getElementById('bgcvs');
 const bgCtx     = bgCvs.getContext('2d');
 
 let mx = -300, my = -300, hasCut = false, snipTimer = null, sharedAc = null;
+
+const crowdAudio = new Audio('crowd.mp3');
+crowdAudio.preload = 'auto';
 
 function getAc() {
   if (!sharedAc) sharedAc = new (window.AudioContext || window.webkitAudioContext)();
@@ -684,76 +702,8 @@ function burst(x, y, n, big = true) {
 
 /* ── Audio ── */
 function playSound() {
-  const ac = getAc();
-
-  /* Metallic snip click */
-  {
-    const buf = ac.createBuffer(1, ac.sampleRate * 0.12, ac.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++)
-      d[i] = (Math.random()*2-1) * Math.exp(-i/ac.sampleRate * 80) * 0.8;
-    const s = ac.createBufferSource(); s.buffer = buf;
-    const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
-    s.connect(hp); hp.connect(ac.destination); s.start();
-  }
-
-  /* Applause */
-  {
-    const dur = 5.5, sr = ac.sampleRate;
-    const buf = ac.createBuffer(2, sr * dur, sr);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = buf.getChannelData(ch);
-      for (let i = 0; i < d.length; i++) {
-        const t = i / sr;
-        const env = t < 0.45 ? t/0.45 : t > dur-1.2 ? (dur-t)/1.2 : 1;
-        const rhy = 0.55 + 0.25*Math.abs(Math.sin(t*7.3+ch)) + 0.20*Math.abs(Math.sin(t*5.1+ch*1.7));
-        d[i] = (Math.random()*2-1) * env * rhy * 0.5;
-      }
-    }
-    const src = ac.createBufferSource(); src.buffer = buf;
-    const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 700;
-    const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 1;
-    const g = ac.createGain();
-    g.gain.setValueAtTime(0, ac.currentTime+0.05);
-    g.gain.linearRampToValueAtTime(2.8, ac.currentTime+0.5);
-    g.gain.setValueAtTime(2.8, ac.currentTime+dur-1.2);
-    g.gain.linearRampToValueAtTime(0, ac.currentTime+dur);
-    src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(ac.destination);
-    src.start(ac.currentTime+0.05);
-  }
-
-  /* Fanfare */
-  [[523.25,0.00,0.30],[659.25,0.18,0.30],[783.99,0.36,0.42],
-   [1046.5,0.60,1.00],[783.99,0.80,0.22],[880.00,0.98,0.22],[1046.5,1.18,1.60]
-  ].forEach(([freq,st,dur]) => {
-    const ac2 = getAc();
-    const osc = ac2.createOscillator(); osc.type = 'triangle'; osc.frequency.value = freq;
-    const g = ac2.createGain();
-    g.gain.setValueAtTime(0, ac2.currentTime+st);
-    g.gain.linearRampToValueAtTime(0.18, ac2.currentTime+st+0.04);
-    g.gain.setValueAtTime(0.16, ac2.currentTime+st+dur-0.06);
-    g.gain.linearRampToValueAtTime(0, ac2.currentTime+st+dur);
-    osc.connect(g); g.connect(ac2.destination);
-    osc.start(ac2.currentTime+st); osc.stop(ac2.currentTime+st+dur+0.05);
-  });
-
-  /* Crowd cheer */
-  [175,215,255,295,195,235,175].forEach((f,i) => {
-    const ac3 = getAc();
-    const osc = ac3.createOscillator(); osc.type = 'sawtooth';
-    const lp = ac3.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100+i*80;
-    const g = ac3.createGain();
-    const dl = 0.08+i*0.04;
-    osc.frequency.setValueAtTime(f, ac3.currentTime+dl);
-    osc.frequency.exponentialRampToValueAtTime(f*1.45, ac3.currentTime+dl+0.9);
-    osc.frequency.linearRampToValueAtTime(f*1.25, ac3.currentTime+dl+3.5);
-    g.gain.setValueAtTime(0, ac3.currentTime+dl);
-    g.gain.linearRampToValueAtTime(0.048, ac3.currentTime+dl+0.18);
-    g.gain.setValueAtTime(0.048, ac3.currentTime+dl+3.2);
-    g.gain.linearRampToValueAtTime(0, ac3.currentTime+dl+4.5);
-    osc.connect(lp); lp.connect(g); g.connect(ac3.destination);
-    osc.start(ac3.currentTime+dl); osc.stop(ac3.currentTime+dl+5);
-  });
+  crowdAudio.currentTime = 0;
+  crowdAudio.play().catch(() => {});
 }
 
 /* ── Cut ribbon ── */
@@ -806,12 +756,9 @@ document.addEventListener('click', e => {
   hintEl.style.opacity = '0';
   setTimeout(() => { hintEl.style.display = 'none'; }, 600);
 
-  /* Victory → 2s later redirect */
+  /* Victory → then finale */
   setTimeout(() => victoryEl.classList.add('on'), 950);
-  setTimeout(() => {
-    document.body.style.opacity = '0';
-    setTimeout(() => { window.location.href = 'https://sns.dila.edu.tw/'; }, 700);
-  }, 950 + 2000);
+  setTimeout(() => finaleEl.classList.add('on'), 950 + 2500);
 });
 
 })();
